@@ -130,6 +130,12 @@ jobs:
         shell: bash
         working-directory: .data
         run: |
+          # El programa solo escribe el fichero si el histórico cambió: en una
+          # primera ejecución sin chollos ni resumen puede no existir todavía.
+          if [ ! -f history.json ]; then
+            echo 'Todavía no hay histórico que guardar: no hay commit.'
+            exit 0
+          fi
           git add history.json
           if git diff --cached --quiet; then
             echo 'Sin cambios en el histórico: no hay commit.'
