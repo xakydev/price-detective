@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from conftest import ClientFactory
 
 from price_detective.config import LAUNCH_REFERENCE_PRICES
 from price_detective.errors import SourceFetchError, SourceParseError
@@ -12,8 +13,6 @@ from price_detective.models import Offer, PhoneModel
 from price_detective.sources import PriceSource, get
 from price_detective.sources.apple import AppleSource
 from price_detective.sources.chollometro import ChollometroSource
-
-from .conftest import ClientFactory
 
 URL = "https://example.test/page"
 
@@ -162,9 +161,9 @@ class TestAppleSource:
         self, make_client: ClientFactory, load_fixture: Callable[[str], str]
     ) -> None:
         client = make_client(_ok(load_fixture("apple_es_iphone.html")))
-        prices = {**LAUNCH_REFERENCE_PRICES, PhoneModel.IPHONE_17_PRO: Decimal("1")}
+        prices = {**LAUNCH_REFERENCE_PRICES, PhoneModel.IPHONE_17_PRO: Decimal(1)}
         offers = {o.model: o for o in AppleSource(prices).fetch(client)}
-        assert offers[PhoneModel.IPHONE_17_PRO].price_eur == Decimal("1")
+        assert offers[PhoneModel.IPHONE_17_PRO].price_eur == Decimal(1)
 
     def test_missing_model_without_fixed_price_raises_naming_model(
         self, make_client: ClientFactory, load_fixture: Callable[[str], str]
