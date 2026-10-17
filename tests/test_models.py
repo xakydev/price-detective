@@ -26,7 +26,7 @@ class TestOffer:
         assert offer.price_eur == Decimal("899.00")
         assert offer.model is PhoneModel.IPHONE_17
 
-    @pytest.mark.parametrize("price", [Decimal("0"), Decimal("-1.50")])
+    @pytest.mark.parametrize("price", [Decimal(0), Decimal("-1.50")])
     def test_build_non_positive_price_raises(self, price: Decimal) -> None:
         with pytest.raises(PriceDetectiveError, match="precio"):
             make_offer(price)
