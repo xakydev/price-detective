@@ -78,4 +78,17 @@ Pro es incorrecta: es el iPhone 17 de 512 GB.
 
 ## Resultado del probe desde Actions
 
-_(pendiente: tarea 1.3)_
+2026-10-17, runner `ubuntu-24.04` (IP de datacenter de GitHub), run 39038145284:
+
+| Fuente | HTTP | Bytes | Página de desafío | Datos |
+|---|---|---|---|---|
+| Chollómetro (búsqueda) | 200 | 81 698 | no | sí (`ThreadMainListItemNormalizer`) |
+| Apple ES iPhone 17 | 200 | 497 227 | no | sí (`"fullPrice":`) |
+
+Ninguna fuente bloquea desde el runner. El tamaño coincide con el de la petición
+residencial. La URL del iPhone 17 Pro devolvió 301 en el primer run (39038081835):
+Apple ya no lo vende, y el probe dejó de consultarla.
+
+El primer run marcó Chollómetro como "anti-bot" por un falso positivo: la página
+normal incluye la config de `recaptcha`. El probe ahora solo detecta páginas de
+desafío y comprueba que llegan los datos que se parsean.
