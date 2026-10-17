@@ -1,0 +1,150 @@
+name: price-detective
+
+# Vigila los precios del iPhone y avisa por Telegram. El histórico vive en la
+# rama `data` (nunca en `main`), que el propio workflow crea y actualiza.
+on:
+  schedule:
+    # Cada hora, en el minuto 17. Se evita el minuto 0 porque es cuando más
+    # workflows programados arrancan a la vez y Actions retrasa o descarta
+    # ejecuciones. Para cambiar la frecuencia hay que editar este cron:
+    # GitHub no permite leerlo de una variable.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      force_summary:
+        description: 'Enviar el resumen aunque no toque por hora'
+        type: boolean
+        default: false
+
+# Escribe en la rama `data`, por eso necesita contents: write.
+permissions:
+  contents: write
+
+# Nunca dos ejecuciones a la vez sobre el histórico; la segunda espera.
+concurrency:
+  group: price-detective
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Comprobar secrets
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          missing=0
+          for name in TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+            # Indirección: solo se mira si hay valor, nunca se imprime.
+            if [ -z "${!name}" ]; then
+              echo "::error title=Falta un secret::El secret $name no está definido. Ver docs/telegram-setup.md"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Checkout de main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Comprobar si existe la rama data
+        id: data_branch
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads origin data > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Caso normal: la rama ya existe y se descarga en .data.
+      - name: Checkout de la rama data
+        if: steps.data_branch.outputs.exists == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: data
+          path: .data
+
+      # Primera ejecución: repo nuevo en .data con rama huérfana `data` que
+      # empuja al mismo remoto. Solo usa git, sin acciones de terceros.
+      - name: Crear la rama data huérfana
+        if: steps.data_branch.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          git init --initial-branch=data .data
+          git -C .data remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Instalar dependencias
+        shell: bash
+        run: uv sync --frozen
+
+      - name: Ejecutar price-detective
+        id: run
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUMMARY_HOURS: ${{ vars.SUMMARY_HOURS }}
+          FORCE_SUMMARY: ${{ inputs.force_summary }}
+        run: |
+          args=()
+          if [ "$FORCE_SUMMARY" = "true" ]; then
+            args+=(--force-summary)
+          fi
+          # No se aborta aquí: hay que escribir el resumen y decidir el commit.
+          set +e
+          uv run python -m price_detective "${args[@]}"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+          case "$code" in
+            0) meaning='Correcto' ;;
+            1) meaning='Error inesperado' ;;
+            2) meaning='Error de configuración (variables o secrets)' ;;
+            3) meaning='Han fallado las dos fuentes de precios' ;;
+            4) meaning='Error con el histórico' ;;
+            5) meaning='Ha fallado el envío a Telegram' ;;
+            *) meaning='Código de salida desconocido' ;;
+          esac
+          {
+            echo '## Resultado'
+            echo
+            echo "- Código de salida: \`$code\`"
+            echo "- Significado: $meaning"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      # Solo si el programa terminó bien; con otro código no guarda nada.
+      - name: Guardar el histórico en la rama data
+        if: steps.run.outputs.code == '0'
+        shell: bash
+        working-directory: .data
+        run: |
+          git add history.json
+          if git diff --cached --quiet; then
+            echo 'Sin cambios en el histórico: no hay commit.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898799+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'chore(data): actualizar histórico de precios'
+            git push origin data
+          fi
+
+      - name: Fallar si el programa falló
+        if: steps.run.outputs.code != '0'
+        shell: bash
+        env:
+          CODE: ${{ steps.run.outputs.code }}
+        run: |
+          echo "::error title=price-detective falló::El programa terminó con código $CODE"
+          exit 1

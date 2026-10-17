@@ -12,3 +12,6 @@ dist/
 
 # artefactos de trabajo de xakydev-teams
 .sdd/
+
+# checkout de la rama data y ejecuciones locales
+.data/
