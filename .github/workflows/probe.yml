@@ -19,32 +19,35 @@ jobs:
           {
             echo '## Probe de acceso desde el runner'
             echo
-            echo '| Fuente | HTTP | Bytes | Anti-bot | URL |'
-            echo '|---|---|---|---|---|'
+            echo '| Fuente | HTTP | Bytes | Anti-bot | Datos | URL |'
+            echo '|---|---|---|---|---|---|'
           } >> "$GITHUB_STEP_SUMMARY"
 
           probe() {
-            local name="$1" url="$2" body code size flag
+            local name="$1" url="$2" marker="$3" body code size flag data
             body="$(mktemp)"
             # Sin -f: un 403 no debe tumbar el job; queremos ver el resultado de ambas.
             code="$(curl -sS -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' \
               --connect-timeout 5 --max-time 20 \
               -o "$body" -w '%{http_code}' "$url")" || code="ERR"
             size="$(wc -c < "$body" | tr -d ' ')"
-            if grep -qiE 'just a moment|attention required|captcha' "$body"; then
-              flag="SI (just a moment / attention required / captcha)"
+            # Solo las páginas de desafío: la palabra "captcha" aparece en páginas
+            # normales (p. ej. la config de recaptcha de Chollómetro).
+            if grep -qiE 'just a moment|attention required' "$body"; then
+              flag="SI (página de desafío)"
             else
               flag="no"
             fi
-            echo "[$name] HTTP=$code bytes=$size antibot=$flag url=$url"
-            if [ "$code" != "200" ]; then
-              echo "::warning title=Probe $name::HTTP $code (bytes=$size, antibot=$flag)"
+            # Lo que importa es que lleguen los datos que parsearemos.
+            if grep -q "$marker" "$body"; then data="si ($marker)"; else data="NO ($marker)"; fi
+            echo "[$name] HTTP=$code bytes=$size antibot=$flag datos=$data url=$url"
+            if [ "$code" != "200" ] || [ "${data%% *}" = "NO" ]; then
+              echo "::warning title=Probe $name::HTTP $code (bytes=$size, antibot=$flag, datos=$data)"
             fi
-            echo "| $name | $code | $size | $flag | \`$url\` |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| $name | $code | $size | $flag | $data | \`$url\` |" >> "$GITHUB_STEP_SUMMARY"
             rm -f "$body"
             sleep 2
           }
 
-          probe chollometro 'https://www.chollometro.com/search?q=iphone%2017&hide_expired=true'
-          probe apple-iphone-17 'https://www.apple.com/es/shop/buy-iphone/iphone-17'
-          probe apple-iphone-17-pro 'https://www.apple.com/es/shop/buy-iphone/iphone-17-pro'
+          probe chollometro 'https://www.chollometro.com/search?q=iphone%2017&hide_expired=true' 'ThreadMainListItemNormalizer'
+          probe apple-iphone-17 'https://www.apple.com/es/shop/buy-iphone/iphone-17' '"fullPrice":'
