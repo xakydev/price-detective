@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+dist/
+
+# secretos locales
+.env
+
+# artefactos de trabajo de xakydev-teams
+.sdd/
