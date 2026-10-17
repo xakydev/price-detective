@@ -52,8 +52,10 @@ class TestClassifyRejected:
             "Apple - Funda de silicona color vainilla para iPhone 17 Pro",
             "Beats – Funda MagSafe para iPhone 17 Pro (Rosa Cuarzo)",
             "Funda beats iphone 17 pro max",
-            "Phelinta Cartera Magnética Compatible con MagSafe Wallet para "
-            "iPhone 18 Pro Max/18 Pro/17/Air/16/15/14/13/12 Serie, 256GB",
+            (
+                "Phelinta Cartera Magnética Compatible con MagSafe Wallet para "
+                "iPhone 18 Pro Max/18 Pro/17/Air/16/15/14/13/12 Serie, 256GB"
+            ),
         ],
     )
     def test_classify_denylisted_returns_none(self, title: str) -> None:
