@@ -2,7 +2,9 @@
 name = "price_detective"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+]
 
 [dependency-groups]
 dev = [
@@ -17,6 +19,8 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["network: tests que hacen peticiones reales a la red"]
+addopts = "-m 'not network'"
 
 [tool.ruff]
 line-length = 88
