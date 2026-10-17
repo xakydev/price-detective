@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from price_detective.errors import HistoryError
-from price_detective.history import History, detect_drops
+from price_detective.history import History, detect_drops, offer_key
 from price_detective.models import Offer, PhoneModel
 
 
@@ -228,3 +228,18 @@ class TestChanged:
 
         assert history.last_summary_slot == slot
         assert history.changed is True
+
+
+class TestOfferKey:
+    def test_offer_key_combines_model_and_storage(self) -> None:
+        offer = make_offer(model=PhoneModel.IPHONE_17_PRO)
+
+        assert offer_key(offer) == "iphone-17-pro:256"
+
+    def test_offer_key_matches_history_keys(self) -> None:
+        history = History()
+        offer = make_offer()
+
+        detect_drops(history, [offer])
+
+        assert offer_key(offer) in history.keys

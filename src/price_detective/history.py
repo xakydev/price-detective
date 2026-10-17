@@ -11,7 +11,14 @@ from typing import Any
 from price_detective.errors import HistoryError
 from price_detective.models import Offer
 
-__all__ = ["MAX_SEEN_IDS", "SCHEMA_VERSION", "History", "KeyRecord", "detect_drops"]
+__all__ = [
+    "MAX_SEEN_IDS",
+    "SCHEMA_VERSION",
+    "History",
+    "KeyRecord",
+    "detect_drops",
+    "offer_key",
+]
 
 SCHEMA_VERSION = 1
 MAX_SEEN_IDS = 500
@@ -118,7 +125,8 @@ class History:
             raise HistoryError(f"No se pudo guardar {path}: {exc}") from exc
 
 
-def _key(offer: Offer) -> str:
+def offer_key(offer: Offer) -> str:
+    """Clave `modelo:capacidad` con la que el histórico agrupa las ofertas."""
     return f"{offer.model.value}:{offer.storage_gb}"
 
 
@@ -131,9 +139,9 @@ def detect_drops(history: History, offers: Sequence[Offer]) -> list[Offer]:
     drops: list[Offer] = []
     baseline_keys: set[str] = set()
     if history.is_empty:
-        baseline_keys.update(_key(offer) for offer in offers)
+        baseline_keys.update(offer_key(offer) for offer in offers)
     for offer in offers:
-        key = _key(offer)
+        key = offer_key(offer)
         record = history.keys.get(key)
         if record is None:
             history.keys[key] = KeyRecord(offer.price_eur, [offer.offer_id])
