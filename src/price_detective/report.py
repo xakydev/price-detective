@@ -55,7 +55,7 @@ def _saving(deal: Offer, reference: Offer) -> str:
     if amount <= 0:
         return ""
     percent = (amount / reference.price_eur * 100).quantize(
-        Decimal("1"), rounding=ROUND_HALF_UP
+        Decimal(1), rounding=ROUND_HALF_UP
     )
     return f" (ahorras {format_eur(amount)}, -{percent}%)"
 
@@ -101,8 +101,10 @@ def compose_alert(offer: Offer, previous_min: Decimal) -> str:
     """Alerta de bajada de precio frente al mínimo anterior."""
     return "\n".join(
         [
-            f"<b>Bajada de precio: {_MODEL_LABELS[offer.model]} "
-            f"{offer.storage_gb} GB</b>",
+            (
+                f"<b>Bajada de precio: {_MODEL_LABELS[offer.model]} "
+                f"{offer.storage_gb} GB</b>"
+            ),
             f"Ahora: {format_eur(offer.price_eur)} en {escape(offer.store)}",
             f"Mínimo anterior: {format_eur(previous_min)}",
             _link(offer),
