@@ -1,0 +1,50 @@
+name: probe
+
+# Comprueba el acceso a las fuentes desde la IP del runner. Solo manual.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sondear fuentes
+        shell: bash
+        run: |
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+          {
+            echo '## Probe de acceso desde el runner'
+            echo
+            echo '| Fuente | HTTP | Bytes | Anti-bot | URL |'
+            echo '|---|---|---|---|---|'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          probe() {
+            local name="$1" url="$2" body code size flag
+            body="$(mktemp)"
+            # Sin -f: un 403 no debe tumbar el job; queremos ver el resultado de ambas.
+            code="$(curl -sS -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' \
+              --connect-timeout 5 --max-time 20 \
+              -o "$body" -w '%{http_code}' "$url")" || code="ERR"
+            size="$(wc -c < "$body" | tr -d ' ')"
+            if grep -qiE 'just a moment|attention required|captcha' "$body"; then
+              flag="SI (just a moment / attention required / captcha)"
+            else
+              flag="no"
+            fi
+            echo "[$name] HTTP=$code bytes=$size antibot=$flag url=$url"
+            if [ "$code" != "200" ]; then
+              echo "::warning title=Probe $name::HTTP $code (bytes=$size, antibot=$flag)"
+            fi
+            echo "| $name | $code | $size | $flag | \`$url\` |" >> "$GITHUB_STEP_SUMMARY"
+            rm -f "$body"
+            sleep 2
+          }
+
+          probe chollometro 'https://www.chollometro.com/search?q=iphone%2017&hide_expired=true'
+          probe apple-iphone-17 'https://www.apple.com/es/shop/buy-iphone/iphone-17'
+          probe apple-iphone-17-pro 'https://www.apple.com/es/shop/buy-iphone/iphone-17-pro'
