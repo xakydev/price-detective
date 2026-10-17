@@ -28,6 +28,9 @@ class Offer:
     title: str
     store: str
     url: str
+    # True si el precio es el fijo de lanzamiento de un modelo que Apple ya no
+    # vende, no un precio vivo de la tienda.
+    launch_price: bool = False
 
     def __post_init__(self) -> None:
         if self.price_eur <= 0:
