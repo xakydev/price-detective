@@ -5,11 +5,11 @@ from typing import Any
 
 import httpx
 import pytest
+from conftest import ClientFactory
 
 from price_detective.config import Settings
 from price_detective.errors import NotifyError
 from price_detective.telegram import MAX_MESSAGE_LEN, TelegramNotifier, split_text
-from tests.conftest import ClientFactory
 
 TOKEN = "123456:SENTINEL-token_XYZ"
 
