@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "keys": {
+    "iphone-17-pro:256": {
+      "min_price": "1092.1",
+      "seen_ids": [
+        "chollometro:2016054"
+      ]
+    }
+  },
+  "last_summary_slot": null
+}
