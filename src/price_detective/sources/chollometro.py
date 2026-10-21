@@ -1,13 +1,23 @@
-"""Fuente Chollómetro: ofertas del JSON `data-vue3` de la página de búsqueda."""
+"""Fuente Chollómetro: ofertas del JSON `data-vue3` de la página de búsqueda.
+
+Política ante datos mal formados: solo cuentan los hilos que pasan el filtro de
+identidad (vigentes y con modelo/capacidad reconocidos). Si uno de ellos está
+roto (falta un campo, precio no numérico o no positivo), se descarta con un
+`log.warning` y se siguen usando los demás. Si ninguno de ellos se puede
+interpretar, o falta la estructura general de la página, la fuente entera
+falla con `SourceParseError`. Los hilos que no son un móvil se ignoran aunque
+estén incompletos.
+"""
 
 import json
-from decimal import Decimal
+import logging
+from decimal import Decimal, InvalidOperation
 from html.parser import HTMLParser
 from typing import Any
 
 import httpx
 
-from price_detective.errors import SourceParseError
+from price_detective.errors import PriceDetectiveError, SourceParseError
 from price_detective.matching import classify
 from price_detective.models import Offer
 from price_detective.sources import get
@@ -16,6 +26,8 @@ __all__ = ["SEARCH_URL", "ChollometroSource", "parse_offers"]
 
 SEARCH_URL = "https://www.chollometro.com/search?q=iphone%2017&hide_expired=true"
 _COMPONENT = "ThreadMainListItemNormalizer"
+
+log = logging.getLogger(__name__)
 
 
 class _ThreadCollector(HTMLParser):
@@ -39,12 +51,14 @@ class _ThreadCollector(HTMLParser):
                 continue
             self.payloads += 1
             if isinstance(payload, dict) and payload.get("name") == _COMPONENT:
-                thread = payload.get("props", {}).get("thread")
+                props = payload.get("props")
+                thread = props.get("thread") if isinstance(props, dict) else None
                 if isinstance(thread, dict):
                     self.threads.append(thread)
 
 
 def _to_offer(thread: dict[str, Any]) -> Offer | None:
+    """Oferta del hilo; `None` si no es relevante, `SourceParseError` si está rota."""
     if thread.get("isExpired"):
         return None
     title = str(thread.get("title", ""))
@@ -52,18 +66,28 @@ def _to_offer(thread: dict[str, Any]) -> Offer | None:
     if classified is None or not thread.get("price"):
         return None
     model, storage_gb = classified
-    thread_id = str(thread["threadId"])
     merchant = thread.get("merchant") or {}
-    return Offer(
-        source="chollometro",
-        offer_id=f"chollometro:{thread_id}",
-        model=model,
-        storage_gb=storage_gb,
-        price_eur=Decimal(str(thread["price"])),
-        title=title,
-        store=str(merchant.get("merchantName") or "Chollómetro"),
-        url=str(thread["shareableLink"]),
-    )
+    if not isinstance(merchant, dict):
+        raise SourceParseError(f"Chollómetro: `merchant` no es un objeto en {title!r}")
+    try:
+        return Offer(
+            source="chollometro",
+            offer_id=f"chollometro:{thread['threadId']}",
+            model=model,
+            storage_gb=storage_gb,
+            price_eur=Decimal(str(thread["price"])),
+            title=title,
+            store=str(merchant.get("merchantName") or "Chollómetro"),
+            url=str(thread["shareableLink"]),
+        )
+    except KeyError as exc:
+        raise SourceParseError(
+            f"Chollómetro: falta el campo {exc} en {title!r}"
+        ) from exc
+    except (InvalidOperation, PriceDetectiveError) as exc:
+        raise SourceParseError(
+            f"Chollómetro: precio inválido {thread['price']!r} en {title!r}"
+        ) from exc
 
 
 def parse_offers(html: str) -> list[Offer]:
@@ -77,8 +101,22 @@ def parse_offers(html: str) -> list[Offer]:
         raise SourceParseError(
             f"Chollómetro: no se encontró ningún bloque {_COMPONENT}"
         )
-    offers = (_to_offer(thread) for thread in collector.threads)
-    return [offer for offer in offers if offer is not None]
+    offers: list[Offer] = []
+    errors: list[SourceParseError] = []
+    for thread in collector.threads:
+        try:
+            offer = _to_offer(thread)
+        except SourceParseError as exc:
+            log.warning("Chollómetro: se descarta una oferta: %s", exc)
+            errors.append(exc)
+            continue
+        if offer is not None:
+            offers.append(offer)
+    if errors and not offers:
+        raise SourceParseError(
+            f"Chollómetro: ninguna oferta interpretable ({errors[0]})"
+        ) from errors[0]
+    return offers
 
 
 class ChollometroSource:

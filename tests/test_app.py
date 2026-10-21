@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
+from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -31,8 +32,10 @@ class FakeWorld:
         chollometro: int = 200,
         apple: int = 200,
         telegram: int = 200,
+        chollometro_html: str | None = None,
     ) -> None:
         self._load = load_fixture
+        self._chollometro_html = chollometro_html
         self.status = {
             "chollometro": chollometro,
             "apple": apple,
@@ -50,6 +53,8 @@ class FakeWorld:
         name = "chollometro" if "chollometro" in host else "apple"
         if self.status[name] != 200:
             return httpx.Response(self.status[name], text="error")
+        if name == "chollometro" and self._chollometro_html is not None:
+            return httpx.Response(200, text=self._chollometro_html)
         fixture = (
             "chollometro_search.html"
             if name == "chollometro"
@@ -269,6 +274,40 @@ class TestSourceFailures:
         now: datetime,
     ) -> None:
         world = FakeWorld(load_fixture, chollometro=503)
+
+        code = run(settings, make_client(world), now, False, history_path)
+
+        assert code == EXIT_OK
+        assert "Chollómetro: no disponible" in world.messages[0]
+        assert "1.109,00 €" in world.messages[0]
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"price": 850},
+            {"price": "1.099,00", "shareableLink": "https://x.test/1"},
+            {"price": -5, "shareableLink": "https://x.test/1"},
+        ],
+    )
+    def test_chollometro_malformed_data_exits_zero_and_summary_reports_it(
+        self,
+        make_client: ClientFactory,
+        load_fixture: Callable[[str], str],
+        settings: Settings,
+        history_path: Path,
+        now: datetime,
+        extra: dict[str, object],
+    ) -> None:
+        thread = {"threadId": 1, "title": "iPhone 17 256GB", **extra}
+        payload = {
+            "name": "ThreadMainListItemNormalizer",
+            "props": {"thread": thread},
+        }
+        html = (
+            f'<article id="thread_1"><div data-vue3="{escape(json.dumps(payload))}">'
+            "</div></article>"
+        )
+        world = FakeWorld(load_fixture, chollometro_html=html)
 
         code = run(settings, make_client(world), now, False, history_path)
 

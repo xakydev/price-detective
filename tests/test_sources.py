@@ -1,7 +1,10 @@
 """Tests de las fuentes de precios: contrato, red, Chollómetro y Apple."""
 
+import json
 from collections.abc import Callable
 from decimal import Decimal
+from html import escape
+from typing import Any
 
 import httpx
 import pytest
@@ -19,6 +22,38 @@ URL = "https://example.test/page"
 
 def _ok(body: str) -> Callable[[httpx.Request], httpx.Response]:
     return lambda request: httpx.Response(200, text=body)
+
+
+def _thread(**overrides: Any) -> dict[str, Any]:
+    """Hilo de Chollómetro válido (iPhone 17 256GB) con campos sobrescritos."""
+    thread: dict[str, Any] = {
+        "threadId": 1,
+        "title": "iPhone 17 256GB Negro",
+        "price": 850.0,
+        "isExpired": False,
+        "shareableLink": "https://www.chollometro.com/share-deal/1",
+        "merchant": {"merchantName": "Tienda"},
+    }
+    thread.update(overrides)
+    return {k: v for k, v in thread.items() if v is not _MISSING}
+
+
+_MISSING = object()
+
+
+def _page(*threads: Any) -> str:
+    """HTML mínimo con un bloque `data-vue3` por hilo."""
+    blocks = []
+    for index, thread in enumerate(threads):
+        payload = {
+            "name": "ThreadMainListItemNormalizer",
+            "props": {"thread": thread},
+        }
+        blocks.append(
+            f'<article id="thread_{index}">'
+            f'<div data-vue3="{escape(json.dumps(payload))}"></div></article>'
+        )
+    return "<html><body>" + "".join(blocks) + "</body></html>"
 
 
 class _FakeSource:
@@ -131,6 +166,90 @@ class TestChollometroSource:
         client = make_client(lambda request: httpx.Response(403))
         with pytest.raises(SourceFetchError, match="403"):
             ChollometroSource().fetch(client)
+
+
+_BROKEN: list[dict[str, Any]] = [
+    {"shareableLink": _MISSING},
+    {"threadId": _MISSING},
+    {"price": "1.099,00"},
+    {"price": -5},
+    {"merchant": "Tienda"},
+]
+
+
+class TestChollometroMalformed:
+    """Datos con forma inesperada: nunca escapa un error que no sea `SourceError`."""
+
+    @pytest.mark.parametrize("broken", _BROKEN)
+    def test_only_broken_offer_raises_parse_error(
+        self, make_client: ClientFactory, broken: dict[str, Any]
+    ) -> None:
+        client = make_client(_ok(_page(_thread(**broken))))
+        with pytest.raises(SourceParseError, match="Chollómetro"):
+            ChollometroSource().fetch(client)
+
+    @pytest.mark.parametrize("broken", _BROKEN)
+    def test_broken_offer_is_discarded_when_others_are_valid(
+        self,
+        make_client: ClientFactory,
+        broken: dict[str, Any],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        html = _page(_thread(**{"threadId": 1, **broken}), _thread(threadId=2))
+        with caplog.at_level("WARNING"):
+            offers = ChollometroSource().fetch(make_client(_ok(html)))
+        assert [o.offer_id for o in offers] == ["chollometro:2"]
+        assert "descarta" in caplog.text
+
+    @pytest.mark.parametrize("props", [[], "x", 3, None])
+    def test_props_that_is_not_an_object_raises_parse_error(
+        self, make_client: ClientFactory, props: Any
+    ) -> None:
+        payload = {"name": "ThreadMainListItemNormalizer", "props": props}
+        html = (
+            f'<article id="thread_1"><div data-vue3="{escape(json.dumps(payload))}">'
+            "</div></article>"
+        )
+        with pytest.raises(SourceParseError, match="Chollómetro"):
+            ChollometroSource().fetch(make_client(_ok(html)))
+
+    def test_irrelevant_broken_thread_does_not_fail_source(
+        self, make_client: ClientFactory
+    ) -> None:
+        # Una funda sin `shareableLink` no pasa el filtro de identidad: se ignora.
+        html = _page(
+            _thread(title="Funda iPhone 17", shareableLink=_MISSING),
+            _thread(threadId=2),
+        )
+        offers = ChollometroSource().fetch(make_client(_ok(html)))
+        assert [o.offer_id for o in offers] == ["chollometro:2"]
+
+
+class TestAppleMalformed:
+    @staticmethod
+    def _html(product: Any) -> str:
+        return f'<script>{{"products":{json.dumps([product])}}}</script>'
+
+    @pytest.mark.parametrize(
+        "price",
+        ["1.109,00", ["x"], 3],
+    )
+    def test_price_that_is_not_an_object_raises_parse_error(
+        self, make_client: ClientFactory, price: Any
+    ) -> None:
+        html = self._html({"name": "iPhone 17 256GB", "price": price})
+        with pytest.raises(SourceParseError, match="Apple: bloque `price` inválido"):
+            AppleSource().fetch(make_client(_ok(html)))
+
+    @pytest.mark.parametrize("full_price", [0.0, -1109.0])
+    def test_non_positive_price_raises_parse_error(
+        self, make_client: ClientFactory, full_price: float
+    ) -> None:
+        html = self._html(
+            {"name": "iPhone 17 256GB", "price": {"fullPrice": full_price}}
+        )
+        with pytest.raises(SourceParseError, match="Apple: .*precio.*inválido"):
+            AppleSource().fetch(make_client(_ok(html)))
 
 
 class TestAppleSource:

@@ -49,10 +49,18 @@ def parse_prices(html: str) -> dict[PhoneModel, Decimal]:
 def _collect(product: Any, prices: dict[PhoneModel, Decimal]) -> None:
     if not isinstance(product, dict):
         return
-    price = (product.get("price") or {}).get("fullPrice")
-    classified = classify(str(product.get("name", "")))
-    if not isinstance(price, Decimal) or classified is None:
+    name = str(product.get("name", ""))
+    classified = classify(name)
+    if classified is None:
         return
+    price_block = product.get("price") or {}
+    if not isinstance(price_block, dict):
+        raise SourceParseError(f"Apple: bloque `price` inválido en {name!r}")
+    price = price_block.get("fullPrice")
+    if not isinstance(price, Decimal):
+        return
+    if price <= 0:
+        raise SourceParseError(f"Apple: precio inválido {price} en {name!r}")
     model, storage_gb = classified
     if storage_gb == TARGET_STORAGE_GB:
         prices.setdefault(model, price)
