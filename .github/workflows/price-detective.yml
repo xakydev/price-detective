@@ -4,11 +4,13 @@ name: price-detective
 # rama `data` (nunca en `main`), que el propio workflow crea y actualiza.
 on:
   schedule:
-    # Cada hora, en el minuto 17. Se evita el minuto 0 porque es cuando más
-    # workflows programados arrancan a la vez y Actions retrasa o descarta
-    # ejecuciones. Para cambiar la frecuencia hay que editar este cron:
-    # GitHub no permite leerlo de una variable.
-    - cron: '17 * * * *'
+    # Cada 30 min, en los minutos 17 y 47. Se evita el minuto 0 porque es
+    # cuando más workflows programados arrancan a la vez y Actions retrasa o
+    # descarta ejecuciones (en producción hubo huecos de 3 a 6 h); con más
+    # ejecuciones hay más oportunidades de que alguna llegue a tiempo. Para
+    # cambiar la frecuencia hay que editar este cron: GitHub no permite leerlo
+    # de una variable.
+    - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
       force_summary:

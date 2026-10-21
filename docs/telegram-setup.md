@@ -103,7 +103,10 @@ uv run pytest -m network
 ## 7. Cambiar la frecuencia
 
 Edita la línea `cron` de `.github/workflows/price-detective.yml` (por defecto
-`17 * * * *`, cada hora en el minuto 17). GitHub **no permite leer el cron de
+`17,47 * * * *`, cada 30 minutos en los minutos 17 y 47). GitHub **no permite leer el cron de
 una variable**, así que el cambio se hace en el fichero. Evita el minuto 0:
 es cuando más workflows arrancan a la vez y Actions retrasa las ejecuciones.
-Las horas del resumen no dependen del cron, sino de `SUMMARY_HOURS`.
+Las horas del resumen no dependen del cron, sino de `SUMMARY_HOURS`. Si una
+ejecución se retrasa, el resumen de un slot sigue pendiente hasta que empieza el
+siguiente slot, así que se envía en la primera ejecución que llegue; si se salta
+un slot entero, solo se envía el más reciente.
