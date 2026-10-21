@@ -68,7 +68,7 @@ Qué esperar:
 - Sí llega a Telegram el **resumen**, porque lo has forzado.
 - El resumen del job en Actions muestra el código de salida.
 
-Desde entonces corre sola cada hora.
+Desde entonces corre sola cada 30 minutos (minutos 17 y 47 de cada hora), aunque GitHub puede retrasar o saltarse ejecuciones.
 
 ## 5. Códigos de salida
 
