@@ -13,7 +13,7 @@ __all__ = ["DEFAULT_SUMMARY_HOURS", "LAUNCH_REFERENCE_PRICES", "Settings"]
 DEFAULT_SUMMARY_HOURS = "9,21"
 
 # Precios de lanzamiento para modelos que Apple ES ya no vende. Son una
-# constante, no una variable de entorno (cifra pendiente de confirmar).
+# constante, no una variable de entorno (confirmada por el usuario).
 LAUNCH_REFERENCE_PRICES: Mapping[PhoneModel, Decimal] = {
     PhoneModel.IPHONE_17_PRO: Decimal("1319.00"),
 }
