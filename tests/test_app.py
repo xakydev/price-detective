@@ -73,9 +73,14 @@ def world(load_fixture: Callable[[str], str]) -> FakeWorld:
     return FakeWorld(load_fixture)
 
 
-def _seed(path: Path, **mins: str) -> None:
-    """Histórico con mínimos para las claves dadas (`iphone_17` -> 17:256)."""
+def _seed(path: Path, last_slot: datetime | None = None, **mins: str) -> None:
+    """Histórico con mínimos para las claves dadas (`iphone_17` -> 17:256).
+
+    `last_slot` es el último resumen enviado; con OFF_HOUR hace falta SLOT_9
+    para que no haya un slot pendiente.
+    """
     history = History()
+    history.last_summary_slot = last_slot
     for name, price in mins.items():
         key = name.replace("_pro", "-pro").replace("iphone_17", "iphone-17") + ":256"
         history.keys[key] = KeyRecord(Decimal(price), ["old"])
@@ -102,6 +107,8 @@ class TestNormalRun:
         settings: Settings,
         history_path: Path,
     ) -> None:
+        _seed(history_path, SLOT_9)
+
         run(settings, make_client(world), OFF_HOUR, False, history_path)
 
         assert world.messages == []
@@ -148,7 +155,7 @@ class TestAlerts:
         settings: Settings,
         history_path: Path,
     ) -> None:
-        _seed(history_path, iphone_17="900.00")
+        _seed(history_path, SLOT_9, iphone_17="900.00")
 
         run(settings, make_client(world), OFF_HOUR, False, history_path)
 
@@ -163,7 +170,7 @@ class TestAlerts:
         settings: Settings,
         history_path: Path,
     ) -> None:
-        _seed(history_path, iphone_17="900.00")
+        _seed(history_path, SLOT_9, iphone_17="900.00")
 
         run(settings, make_client(world), OFF_HOUR, False, history_path)
 
@@ -179,7 +186,7 @@ class TestAlerts:
         settings: Settings,
         history_path: Path,
     ) -> None:
-        _seed(history_path, iphone_17="900.00")
+        _seed(history_path, SLOT_9, iphone_17="900.00")
         run(settings, make_client(world), OFF_HOUR, False, history_path)
         world.messages.clear()
 
@@ -218,19 +225,34 @@ class TestSummary:
 
         assert world.messages == []
 
-    def test_forced_summary_off_hour_is_sent_without_registering_slot(
+    def test_forced_summary_off_hour_is_sent_without_changing_sent_slot(
         self,
         make_client: ClientFactory,
         world: FakeWorld,
         settings: Settings,
         history_path: Path,
     ) -> None:
+        _seed(history_path, SLOT_9)
+
         code = run(settings, make_client(world), OFF_HOUR, True, history_path)
 
         assert code == EXIT_OK
         assert len(world.messages) == 1
         assert "Resumen" in world.messages[0]
-        assert History.load(history_path).last_summary_slot is None
+        assert History.load(history_path).last_summary_slot == SLOT_9
+
+    def test_late_cron_sends_pending_slot_and_registers_it(
+        self,
+        make_client: ClientFactory,
+        world: FakeWorld,
+        settings: Settings,
+        history_path: Path,
+    ) -> None:
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        assert len(world.messages) == 1
+        assert "Resumen" in world.messages[0]
+        assert History.load(history_path).last_summary_slot == SLOT_9
 
     def test_forced_summary_in_due_slot_registers_that_slot(
         self,
@@ -338,7 +360,7 @@ class TestSourceFailures:
         now: datetime,
     ) -> None:
         world = FakeWorld(load_fixture, chollometro=503, apple=503)
-        _seed(history_path, iphone_17="900.00")
+        _seed(history_path, SLOT_9, iphone_17="900.00")
         before = history_path.read_text(encoding="utf-8")
 
         code = run(settings, make_client(world), now, True, history_path)
@@ -369,7 +391,7 @@ class TestNotifyFailure:
         history_path: Path,
     ) -> None:
         world = FakeWorld(load_fixture, telegram=500)
-        _seed(history_path, iphone_17="900.00")
+        _seed(history_path, SLOT_9, iphone_17="900.00")
         before = history_path.read_text(encoding="utf-8")
 
         code = run(settings, make_client(world), OFF_HOUR, False, history_path)
@@ -384,7 +406,7 @@ class TestNotifyFailure:
         settings: Settings,
         history_path: Path,
     ) -> None:
-        _seed(history_path, iphone_17="900.00")
+        _seed(history_path, SLOT_9, iphone_17="900.00")
         run(
             settings,
             make_client(FakeWorld(load_fixture, telegram=500)),
