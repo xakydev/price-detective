@@ -134,12 +134,14 @@ def detect_drops(history: History, offers: Sequence[Offer]) -> list[Offer]:
     """Devuelve las bajadas y actualiza el histórico (`changed` si hubo cambios).
 
     Con histórico vacío, o para una clave sin mínimo, la primera oferta fija la
-    línea base sin alertar.
+    línea base sin alertar. Hay como mucho una bajada por clave y ejecución, la
+    de la oferta nueva más barata, sea cual sea el orden de entrada.
     """
-    drops: list[Offer] = []
     baseline_keys: set[str] = set()
     if history.is_empty:
         baseline_keys.update(offer_key(offer) for offer in offers)
+    cheapest: dict[str, Offer] = {}  # oferta nueva más barata por clave
+    previous_min: dict[str, Decimal] = {}
     for offer in offers:
         key = offer_key(offer)
         record = history.keys.get(key)
@@ -148,12 +150,19 @@ def detect_drops(history: History, offers: Sequence[Offer]) -> list[Offer]:
             baseline_keys.add(key)
             history.changed = True
             continue
-        is_new = record.mark_seen(offer.offer_id)
-        if not is_new:
+        if not record.mark_seen(offer.offer_id):
             continue
         history.changed = True
-        if offer.price_eur < record.min_price:
-            record.min_price = offer.price_eur
-            if key not in baseline_keys:
-                drops.append(offer)
+        if key in baseline_keys:
+            record.min_price = min(record.min_price, offer.price_eur)
+            continue
+        previous_min.setdefault(key, record.min_price)
+        best = cheapest.get(key)
+        if best is None or offer.price_eur < best.price_eur:
+            cheapest[key] = offer
+    drops: list[Offer] = []
+    for key, offer in cheapest.items():
+        if offer.price_eur < previous_min[key]:
+            history.keys[key].min_price = offer.price_eur
+            drops.append(offer)
     return drops

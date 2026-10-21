@@ -127,6 +127,20 @@ class TestDetectDrops:
         assert [o.offer_id for o in drops] == ["new"]
         assert history.keys["iphone-17:256"].min_price == Decimal("850.00")
 
+    @pytest.mark.parametrize("prices", [("880.00", "850.00"), ("850.00", "880.00")])
+    def test_several_new_offers_of_same_key_give_one_drop_the_cheapest(
+        self, prices: tuple[str, str]
+    ) -> None:
+        history = seeded_history()
+        offers = [make_offer(f"o{price}", price) for price in prices]
+
+        drops = detect_drops(history, offers)
+
+        assert [o.offer_id for o in drops] == ["o850.00"]
+        record = history.keys["iphone-17:256"]
+        assert record.min_price == Decimal("850.00")
+        assert {"o880.00", "o850.00"} <= set(record.seen_ids)
+
     def test_seen_offer_is_not_drop(self) -> None:
         history = seeded_history()
         detect_drops(history, [make_offer("new", "850.00")])
