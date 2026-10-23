@@ -31,9 +31,10 @@ jobs:
               --connect-timeout 5 --max-time 20 \
               -o "$body" -w '%{http_code}' "$url")" || code="ERR"
             size="$(wc -c < "$body" | tr -d ' ')"
-            # Solo las páginas de desafío: la palabra "captcha" aparece en páginas
-            # normales (p. ej. la config de recaptcha de Chollómetro).
-            if grep -qiE 'just a moment|attention required' "$body"; then
+            # Solo las páginas de desafío, por su <title> y en inglés o español:
+            # "captcha" y "un momento" aparecen en páginas normales (config de
+            # recaptcha de Chollómetro, texto de Apple).
+            if grep -qiE '<title>[^<]*(just a moment|attention required|un momento)' "$body"; then
               flag="SI (página de desafío)"
             else
               flag="no"
