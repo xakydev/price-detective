@@ -27,7 +27,7 @@ jobs:
             local name="$1" url="$2" marker="$3" body code size flag data
             body="$(mktemp)"
             # Sin -f: un 403 no debe tumbar el job; queremos ver el resultado de ambas.
-            code="$(curl -sS -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' \
+            code="$(curl -sS --compressed -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' \
               --connect-timeout 5 --max-time 20 \
               -o "$body" -w '%{http_code}' "$url")" || code="ERR"
             size="$(wc -c < "$body" | tr -d ' ')"
@@ -52,3 +52,7 @@ jobs:
 
           probe chollometro 'https://www.chollometro.com/search?q=iphone%2017&hide_expired=true' 'ThreadMainListItemNormalizer'
           probe apple-iphone-17 'https://www.apple.com/es/shop/buy-iphone/iphone-17' '"fullPrice":'
+          probe mediamarkt-17 'https://www.mediamarkt.es/es/product/_apple-iphone-17-negro-256-gb-5g-63-oled-super-retina-xdr-chip-a19-ios-1606125.html' '"hasVariant"'
+          probe mediamarkt-17pro 'https://www.mediamarkt.es/es/product/_apple-iphone-17-pro-naranja-cosmico-256-gb-5g-63-oled-super-retina-xdr-chip-a19-pro-ios-1606136.html' '"hasVariant"'
+          probe phonehouse-17 'https://www.phonehouse.es/iphone-17-256gb-0f02e513/p' '"AggregateOffer"'
+          probe phonehouse-17pro 'https://www.phonehouse.es/iphone-17-pro-256gb-c4ce8100/p' '"AggregateOffer"'
