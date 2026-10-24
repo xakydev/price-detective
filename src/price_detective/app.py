@@ -12,7 +12,7 @@ from price_detective.errors import HistoryError, NotifyError, SourceError
 from price_detective.history import History, detect_drops, offer_key
 from price_detective.models import SourceResult
 from price_detective.report import compose_alert, compose_summary
-from price_detective.schedule import due_summary_slot
+from price_detective.schedule import due_summary_slot, summary_slot_in_future
 from price_detective.sources import PriceSource
 from price_detective.sources.apple import AppleSource
 from price_detective.sources.chollometro import ChollometroSource
@@ -96,6 +96,11 @@ def run(
     # Con `force_summary` se registra el slot pendiente, si lo hay, para que el
     # resumen programado de ese slot no se duplique; si no hay ninguno, el
     # resumen forzado no registra slot.
+    if summary_slot_in_future(history.last_summary_slot, now):
+        log.warning(
+            "last_summary_slot %s es posterior a ahora; se ignora",
+            history.last_summary_slot,
+        )
     slot = due_summary_slot(now, settings.summary_hours, history.last_summary_slot)
     send_summary = force_summary or slot is not None
     log.info(

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from price_detective.schedule import due_summary_slot
+from price_detective.schedule import due_summary_slot, summary_slot_in_future
 
 MADRID = ZoneInfo("Europe/Madrid")
 HOURS = (9, 21)
@@ -146,3 +146,42 @@ class TestDaylightSaving:
         last = madrid(2026, 10, 24, 21)
 
         assert due_summary_slot(madrid(2026, 10, 25, 8, 59), HOURS, last) is None
+
+
+class TestFutureLastSlot:
+    @pytest.mark.parametrize("last", [madrid(2026, 10, 18, 9), madrid(2099, 1, 1, 9)])
+    def test_future_last_is_ignored_and_current_slot_returned(
+        self, last: datetime
+    ) -> None:
+        now = madrid(2026, 10, 17, 14)
+
+        assert due_summary_slot(now, HOURS, last) == madrid(2026, 10, 17, 9)
+
+    def test_last_equal_to_current_slot_still_returns_none(self) -> None:
+        now = madrid(2026, 10, 17, 14)
+
+        assert due_summary_slot(now, HOURS, madrid(2026, 10, 17, 9)) is None
+
+
+class TestSummarySlotInFuture:
+    NOW = madrid(2026, 10, 17, 14)
+
+    @pytest.mark.parametrize(
+        ("last", "expected"),
+        [
+            (madrid(2026, 10, 18, 9), True),
+            (madrid(2099, 1, 1, 9), True),
+            (madrid(2026, 10, 17, 14), False),
+            (None, False),
+            (madrid(2026, 10, 17, 9), False),
+        ],
+    )
+    def test_summary_slot_in_future_returns_expected(
+        self, last: datetime | None, expected: bool
+    ) -> None:
+        assert summary_slot_in_future(last, self.NOW) is expected
+
+    def test_summary_slot_in_future_compares_in_utc(self) -> None:
+        last = datetime(2026, 10, 17, 12, 0, 1, tzinfo=UTC)  # 14:00:01 en Madrid
+
+        assert summary_slot_in_future(last, self.NOW) is True

@@ -663,3 +663,40 @@ class TestNoSensitiveLogging:
         run(settings, make_client(world), now, False, history_path)
 
         _assert_no_sensitive(caplog, ["TITULOROTO", "42"])
+
+
+class TestFutureSummarySlot:
+    def test_future_last_slot_sends_summary_and_warns(
+        self,
+        make_client: ClientFactory,
+        world: FakeWorld,
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        _seed(history_path, datetime(2099, 1, 1, 9, 0, tzinfo=MADRID))
+
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        assert len(world.messages) == 1
+        assert "Resumen" in world.messages[0]
+        assert History.load(history_path).last_summary_slot == SLOT_9
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("es posterior a ahora" in r.getMessage() for r in warnings)
+
+    def test_current_last_slot_sends_nothing_and_does_not_warn(
+        self,
+        make_client: ClientFactory,
+        world: FakeWorld,
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        _seed(history_path, SLOT_9)
+
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        assert world.messages == []
+        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
