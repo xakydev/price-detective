@@ -1,7 +1,8 @@
 """Tests de `run`: la pasada completa con fuentes y Telegram simulados."""
 
 import json
-from collections.abc import Callable
+import logging
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from decimal import Decimal
 from html import escape
@@ -15,6 +16,7 @@ from conftest import ClientFactory
 from price_detective.app import EXIT_NOTIFY_FAILED, EXIT_OK, run
 from price_detective.config import Settings
 from price_detective.history import History, KeyRecord
+from price_detective.sources.chollometro import parse_offers
 
 TOKEN = "123456:SECRET-TOKEN"
 MADRID = ZoneInfo("Europe/Madrid")
@@ -452,3 +454,212 @@ class TestCorruptHistory:
         assert code != EXIT_OK
         assert history_path.read_text(encoding="utf-8") == "{not json"
         assert world.messages == []
+
+
+@pytest.fixture
+def httpx_quiet() -> Iterator[None]:
+    """Reproduce `__main__`: httpx en WARNING, pues su INFO lleva la URL con token."""
+    logger = logging.getLogger("httpx")
+    previous = logger.level
+    logger.setLevel(logging.WARNING)
+    yield
+    logger.setLevel(previous)
+
+
+def _broken_page(valid_title: str, broken_title: str) -> str:
+    """Página con un hilo válido y otro roto (sin `shareableLink`)."""
+    threads = [
+        {
+            "threadId": 1,
+            "title": valid_title,
+            "price": 850.0,
+            "shareableLink": "https://x.test/1",
+        },
+        {"threadId": 2, "title": broken_title, "price": 850.0},
+    ]
+    blocks = []
+    for index, thread in enumerate(threads):
+        payload = {"name": "ThreadMainListItemNormalizer", "props": {"thread": thread}}
+        blocks.append(
+            f'<article id="thread_{index}">'
+            f'<div data-vue3="{escape(json.dumps(payload))}"></div></article>'
+        )
+    return "<html><body>" + "".join(blocks) + "</body></html>"
+
+
+def _assert_no_sensitive(
+    caplog: pytest.LogCaptureFixture, forbidden: list[str]
+) -> None:
+    """Ni el texto formateado ni los argumentos de ningún registro filtran datos."""
+    forbidden = [TOKEN, "SECRET-TOKEN", "api.telegram.org", *forbidden]
+    assert caplog.records
+    for record in caplog.records:
+        haystack = " ".join([record.getMessage(), str(record.msg), str(record.args)])
+        for secret in forbidden:
+            assert secret not in haystack, (secret, haystack)
+    for secret in forbidden:
+        assert secret not in caplog.text
+
+
+@pytest.mark.usefixtures("httpx_quiet")
+class TestRunLogging:
+    def test_run_logs_one_info_line_per_source_with_count(
+        self,
+        make_client: ClientFactory,
+        world: FakeWorld,
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.INFO)
+
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        messages = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+        assert any(m.startswith("Fuente chollometro: ") for m in messages)
+        assert any(m.startswith("Fuente apple: ") for m in messages)
+        assert any(m == "Alertas: 0" for m in messages)
+        assert any(m.startswith("Resumen: slot=") for m in messages)
+        assert "Histórico guardado" in messages
+
+    def test_run_logs_source_with_zero_offers(
+        self,
+        make_client: ClientFactory,
+        load_fixture: Callable[[str], str],
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        html = '<html><body><div data-vue3="{}"></div></body></html>'
+        world = FakeWorld(load_fixture, chollometro_html=html)
+
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert "Fuente chollometro: 0 ofertas" in messages
+
+    def test_run_logs_alert_count_and_summary_decision(
+        self,
+        make_client: ClientFactory,
+        world: FakeWorld,
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        _seed(history_path, SLOT_9, iphone_17="900.00")
+
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert "Alertas: 1" in messages
+        assert "Resumen: slot=ninguno forzado=False enviar=False" in messages
+
+    def test_run_logs_unchanged_history(
+        self,
+        make_client: ClientFactory,
+        world: FakeWorld,
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+        caplog.clear()
+        caplog.set_level(logging.INFO)
+
+        run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert "Histórico sin cambios; no se guarda" in messages
+
+
+@pytest.mark.usefixtures("httpx_quiet")
+class TestNoSensitiveLogging:
+    def test_normal_run_logs_no_secrets_titles_or_messages(
+        self,
+        make_client: ClientFactory,
+        world: FakeWorld,
+        load_fixture: Callable[[str], str],
+        settings: Settings,
+        history_path: Path,
+        now: datetime,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.DEBUG)
+        titles = [
+            o.title for o in parse_offers(load_fixture("chollometro_search.html"))
+        ]
+        _seed(history_path, None, iphone_17="900.00")
+
+        run(settings, make_client(world), now, False, history_path)
+
+        assert len(world.messages) == 2  # una alerta y el resumen
+        _assert_no_sensitive(caplog, [*titles, "42", *world.messages])
+
+    def test_send_failure_logs_no_secrets(
+        self,
+        make_client: ClientFactory,
+        load_fixture: Callable[[str], str],
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.DEBUG)
+        world = FakeWorld(load_fixture, telegram=500)
+        titles = [
+            o.title for o in parse_offers(load_fixture("chollometro_search.html"))
+        ]
+        _seed(history_path, SLOT_9, iphone_17="900.00")
+
+        code = run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        assert code == EXIT_NOTIFY_FAILED
+        _assert_no_sensitive(caplog, [*titles, "42"])
+
+    def test_discarded_offer_logs_thread_id_not_title(
+        self,
+        make_client: ClientFactory,
+        load_fixture: Callable[[str], str],
+        settings: Settings,
+        history_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.DEBUG)
+        html = _broken_page(
+            "iPhone 17 256GB TITULOVALIDO", "iPhone 17 256GB TITULOROTO"
+        )
+        world = FakeWorld(load_fixture, chollometro_html=html)
+
+        code = run(settings, make_client(world), OFF_HOUR, False, history_path)
+
+        assert code == EXIT_OK
+        assert any("se descarta" in r.getMessage() for r in caplog.records)
+        _assert_no_sensitive(caplog, ["TITULOVALIDO", "TITULOROTO", "42"])
+        assert any(
+            "2" in r.getMessage()
+            for r in caplog.records
+            if "descarta" in r.getMessage()
+        )
+
+    def test_source_failure_after_discard_logs_no_title(
+        self,
+        make_client: ClientFactory,
+        load_fixture: Callable[[str], str],
+        settings: Settings,
+        history_path: Path,
+        now: datetime,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.DEBUG)
+        thread = {"threadId": 7, "title": "iPhone 17 256GB TITULOROTO", "price": 850}
+        payload = {"name": "ThreadMainListItemNormalizer", "props": {"thread": thread}}
+        html = (
+            f'<article id="thread_1"><div data-vue3="{escape(json.dumps(payload))}">'
+            "</div></article>"
+        )
+        world = FakeWorld(load_fixture, chollometro_html=html)
+
+        run(settings, make_client(world), now, False, history_path)
+
+        _assert_no_sensitive(caplog, ["TITULOROTO", "42"])

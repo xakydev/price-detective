@@ -45,10 +45,12 @@ _ALERT_SOURCE = "chollometro"
 def _fetch(source: PriceSource, client: httpx.Client) -> SourceResult:
     """Consulta una fuente aislando su fallo; solo captura `SourceError`."""
     try:
-        return SourceResult(source=source.name, offers=tuple(source.fetch(client)))
+        offers = tuple(source.fetch(client))
     except SourceError as exc:
         log.warning("La fuente %s ha fallado: %s", source.name, exc)
         return SourceResult(source=source.name, error=str(exc))
+    log.info("Fuente %s: %d ofertas", source.name, len(offers))
+    return SourceResult(source=source.name, offers=offers)
 
 
 def run(
@@ -89,12 +91,19 @@ def run(
         key: record.min_price for key, record in history.keys.items()
     }
     drops = detect_drops(history, alert_offers)
+    log.info("Alertas: %d", len(drops))
 
     # Con `force_summary` se registra el slot pendiente, si lo hay, para que el
     # resumen programado de ese slot no se duplique; si no hay ninguno, el
     # resumen forzado no registra slot.
     slot = due_summary_slot(now, settings.summary_hours, history.last_summary_slot)
     send_summary = force_summary or slot is not None
+    log.info(
+        "Resumen: slot=%s forzado=%s enviar=%s",
+        slot.isoformat() if slot is not None else "ninguno",
+        force_summary,
+        send_summary,
+    )
 
     notifier = TelegramNotifier(client, settings)
     try:
@@ -114,4 +123,7 @@ def run(
         except HistoryError as exc:
             log.error("%s", exc)
             return EXIT_HISTORY_ERROR
+        log.info("Histórico guardado")
+    else:
+        log.info("Histórico sin cambios; no se guarda")
     return EXIT_OK

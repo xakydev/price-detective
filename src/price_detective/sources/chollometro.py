@@ -57,6 +57,12 @@ class _ThreadCollector(HTMLParser):
                     self.threads.append(thread)
 
 
+def _ref(thread: dict[str, Any]) -> str:
+    """Referencia de la oferta para los mensajes: su `threadId`, nunca el título."""
+    thread_id = thread.get("threadId")
+    return f"threadId {thread_id}" if thread_id is not None else "sin id"
+
+
 def _to_offer(thread: dict[str, Any]) -> Offer | None:
     """Oferta del hilo; `None` si no es relevante, `SourceParseError` si está rota."""
     if thread.get("isExpired"):
@@ -68,7 +74,9 @@ def _to_offer(thread: dict[str, Any]) -> Offer | None:
     model, storage_gb = classified
     merchant = thread.get("merchant") or {}
     if not isinstance(merchant, dict):
-        raise SourceParseError(f"Chollómetro: `merchant` no es un objeto en {title!r}")
+        raise SourceParseError(
+            f"Chollómetro: `merchant` no es un objeto en {_ref(thread)}"
+        )
     try:
         return Offer(
             source="chollometro",
@@ -82,11 +90,11 @@ def _to_offer(thread: dict[str, Any]) -> Offer | None:
         )
     except KeyError as exc:
         raise SourceParseError(
-            f"Chollómetro: falta el campo {exc} en {title!r}"
+            f"Chollómetro: falta el campo {exc} en {_ref(thread)}"
         ) from exc
     except (InvalidOperation, PriceDetectiveError) as exc:
         raise SourceParseError(
-            f"Chollómetro: precio inválido {thread['price']!r} en {title!r}"
+            f"Chollómetro: precio inválido {thread['price']!r} en {_ref(thread)}"
         ) from exc
 
 
