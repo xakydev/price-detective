@@ -92,3 +92,7 @@ Apple ya no lo vende, y el probe dejó de consultarla.
 El primer run marcó Chollómetro como "anti-bot" por un falso positivo: la página
 normal incluye la config de `recaptcha`. El probe ahora solo detecta páginas de
 desafío y comprueba que llegan los datos que se parsean.
+
+## Anonimización (2026-10-24)
+
+Antes de hacer público el repositorio, en `chollometro_search.html` y `chollometro_broken.html` se sustituyeron los nombres de usuario de quienes publicaron las ofertas por `usuario_1` … `usuario_5` y sus `userId` (también en las rutas de avatar) por `9000101` … `9000105`. El parser no usa esos campos.
