@@ -67,6 +67,11 @@ class TelegramNotifier:
         except httpx.TimeoutException:
             # `from None`: la excepción de httpx puede arrastrar la URL con el token.
             raise NotifyError("timeout al enviar el mensaje a Telegram") from None
+        except httpx.InvalidURL:
+            # No hereda de `HTTPError`; `from None` evita encadenar la URL con el token.
+            raise NotifyError(
+                "URL de Telegram inválida; revisa TELEGRAM_BOT_TOKEN"
+            ) from None
         except httpx.HTTPError as exc:
             raise NotifyError(
                 f"error de red ({type(exc).__name__}) al enviar a Telegram"

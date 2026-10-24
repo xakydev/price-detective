@@ -73,6 +73,38 @@ class TestSend:
         assert TOKEN not in repr(info.value)
         assert info.value.__cause__ is None or TOKEN not in str(info.value.__cause__)
 
+    # httpx 0.28 solo lanza InvalidURL con caracteres de control ASCII. El
+    # espacio, los no ASCII, "#", "/" y "%" se codifican o se aceptan, y la
+    # petición sale con un token inválido (Telegram responde 401, ya cubierto).
+    @pytest.mark.parametrize(
+        "bad_token",
+        [
+            "123456:SENTINEL\ntoken_XYZ",
+            "123456:SENTINEL\rtoken_XYZ",
+            "123456:SENTINEL\ttoken_XYZ",
+            "123456:SENTINEL\x00token_XYZ",
+            "123456:SENTINEL\x7ftoken_XYZ",
+        ],
+        ids=["salto", "retorno", "tabulador", "nul", "del"],
+    )
+    def test_send_invalid_url_raises_notify_error_without_token(
+        self, make_client: ClientFactory, bad_token: str
+    ) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise AssertionError("la petición no debería salir")
+
+        settings = Settings(
+            telegram_token=bad_token, telegram_chat_id="-1001", summary_hours=(9, 21)
+        )
+        notifier = TelegramNotifier(make_client(handler), settings)
+        with pytest.raises(NotifyError, match="URL de Telegram inválida") as info:
+            notifier.send("hola")
+        assert bad_token not in str(info.value)
+        assert bad_token not in repr(info.value)
+        assert info.value.__cause__ is None
+        assert info.value.__suppress_context__ is True
+        assert "SENTINEL" not in str(info.value.__context__)
+
     def test_send_sets_explicit_timeouts(self, make_client: ClientFactory) -> None:
         timeouts: list[Any] = []
 
