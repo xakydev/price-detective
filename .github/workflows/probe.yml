@@ -52,7 +52,3 @@ jobs:
 
           probe chollometro 'https://www.chollometro.com/search?q=iphone%2017&hide_expired=true' 'ThreadMainListItemNormalizer'
           probe apple-iphone-17 'https://www.apple.com/es/shop/buy-iphone/iphone-17' '"fullPrice":'
-          probe mediamarkt-17 'https://www.mediamarkt.es/es/product/_apple-iphone-17-negro-256-gb-5g-63-oled-super-retina-xdr-chip-a19-ios-1606125.html' '"hasVariant"'
-          probe mediamarkt-17pro 'https://www.mediamarkt.es/es/product/_apple-iphone-17-pro-naranja-cosmico-256-gb-5g-63-oled-super-retina-xdr-chip-a19-pro-ios-1606136.html' '"hasVariant"'
-          probe phonehouse-17 'https://www.phonehouse.es/iphone-17-256gb-0f02e513/p' '"AggregateOffer"'
-          probe phonehouse-17pro 'https://www.phonehouse.es/iphone-17-pro-256gb-c4ce8100/p' '"AggregateOffer"'
