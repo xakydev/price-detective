@@ -57,8 +57,9 @@ def _collect(product: Any, prices: dict[PhoneModel, Decimal]) -> None:
     if not isinstance(price_block, dict):
         raise SourceParseError(f"Apple: bloque `price` inválido en {name!r}")
     price = price_block.get("fullPrice")
-    if not isinstance(price, Decimal):
+    if isinstance(price, bool) or not isinstance(price, int | Decimal):
         return
+    price = Decimal(price)
     if price <= 0:
         raise SourceParseError(f"Apple: precio inválido {price} en {name!r}")
     model, storage_gb = classified

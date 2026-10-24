@@ -296,6 +296,31 @@ class TestAppleMalformed:
         with pytest.raises(SourceParseError, match="iphone-17"):
             AppleSource().fetch(make_client(_ok(html)))
 
+    @pytest.mark.parametrize("raw", ["1109", "1109.00"])
+    def test_integer_and_decimal_full_price_give_same_reference(
+        self, make_client: ClientFactory, raw: str
+    ) -> None:
+        html = (
+            '<script>{"products":[{"name":"iPhone 17 256GB",'
+            f'"price":{{"fullPrice":{raw}}}}}]}}</script>'
+        )
+        offers = {o.model: o for o in AppleSource().fetch(make_client(_ok(html)))}
+        price = offers[PhoneModel.IPHONE_17].price_eur
+        assert price == Decimal("1109.00")
+        assert isinstance(price, Decimal)
+        assert not offers[PhoneModel.IPHONE_17].launch_price
+
+    @pytest.mark.parametrize("raw", ["true", "false"])
+    def test_boolean_full_price_raises_naming_the_model(
+        self, make_client: ClientFactory, raw: str
+    ) -> None:
+        html = (
+            '<script>{"products":[{"name":"iPhone 17 256GB",'
+            f'"price":{{"fullPrice":{raw}}}}}]}}</script>'
+        )
+        with pytest.raises(SourceParseError, match="iphone-17"):
+            AppleSource().fetch(make_client(_ok(html)))
+
 
 class TestAppleSource:
     def test_iphone_17_256_is_1109_not_512_price(
