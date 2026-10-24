@@ -31,6 +31,13 @@ class TestOffer:
         with pytest.raises(PriceDetectiveError, match="precio"):
             make_offer(price)
 
+    @pytest.mark.parametrize(
+        "price", [Decimal("Infinity"), Decimal("-Infinity"), Decimal("NaN")]
+    )
+    def test_build_non_finite_price_raises_domain_error(self, price: Decimal) -> None:
+        with pytest.raises(PriceDetectiveError, match="precio"):
+            make_offer(price)
+
     def test_offer_is_frozen(self) -> None:
         offer = make_offer()
         with pytest.raises(FrozenInstanceError):

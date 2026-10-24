@@ -33,9 +33,9 @@ class Offer:
     launch_price: bool = False
 
     def __post_init__(self) -> None:
-        if self.price_eur <= 0:
+        if not self.price_eur.is_finite() or self.price_eur <= 0:
             raise PriceDetectiveError(
-                f"El precio debe ser positivo, recibido {self.price_eur}"
+                f"El precio debe ser finito y positivo, recibido {self.price_eur}"
             )
 
 

@@ -1,6 +1,7 @@
 """Tests de las fuentes de precios: contrato, red, Chollómetro y Apple."""
 
 import json
+import math
 from collections.abc import Callable
 from decimal import Decimal
 from html import escape
@@ -201,6 +202,39 @@ class TestChollometroMalformed:
         assert [o.offer_id for o in offers] == ["chollometro:2"]
         assert "descarta" in caplog.text
 
+    @pytest.mark.parametrize("price", [math.inf, -math.inf, math.nan])
+    def test_non_finite_price_is_discarded_without_title_in_logs(
+        self,
+        make_client: ClientFactory,
+        caplog: pytest.LogCaptureFixture,
+        price: float,
+    ) -> None:
+        title = "iPhone 17 256GB TituloSecreto"
+        html = _page(
+            _thread(threadId=1, title=title, price=price),
+            _thread(threadId=2),
+        )
+        with caplog.at_level("DEBUG"):
+            offers = ChollometroSource().fetch(make_client(_ok(html)))
+        assert [o.offer_id for o in offers] == ["chollometro:2"]
+        assert "descarta" in caplog.text
+        assert "threadId 1" in caplog.text
+        assert "TituloSecreto" not in caplog.text
+        assert all("TituloSecreto" not in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.parametrize("price", [math.inf, -math.inf, math.nan])
+    def test_all_non_finite_prices_raise_parse_error(
+        self,
+        make_client: ClientFactory,
+        caplog: pytest.LogCaptureFixture,
+        price: float,
+    ) -> None:
+        html = _page(_thread(title="iPhone 17 256GB TituloSecreto", price=price))
+        with caplog.at_level("DEBUG"), pytest.raises(SourceParseError) as info:
+            ChollometroSource().fetch(make_client(_ok(html)))
+        assert "TituloSecreto" not in str(info.value)
+        assert "TituloSecreto" not in caplog.text
+
     @pytest.mark.parametrize("props", [[], "x", 3, None])
     def test_props_that_is_not_an_object_raises_parse_error(
         self, make_client: ClientFactory, props: Any
@@ -249,6 +283,17 @@ class TestAppleMalformed:
             {"name": "iPhone 17 256GB", "price": {"fullPrice": full_price}}
         )
         with pytest.raises(SourceParseError, match="Apple: .*precio.*inválido"):
+            AppleSource().fetch(make_client(_ok(html)))
+
+    @pytest.mark.parametrize("full_price", [math.inf, math.nan])
+    def test_non_finite_price_is_ignored_as_before(
+        self, make_client: ClientFactory, full_price: float
+    ) -> None:
+        # json.dumps emite Infinity/NaN, que json lee como float: se ignoran.
+        html = self._html(
+            {"name": "iPhone 17 256GB", "price": {"fullPrice": full_price}}
+        )
+        with pytest.raises(SourceParseError, match="iphone-17"):
             AppleSource().fetch(make_client(_ok(html)))
 
 
