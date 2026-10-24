@@ -57,11 +57,13 @@ jobs:
         id: data_branch
         shell: bash
         run: |
-          if git ls-remote --exit-code --heads origin data > /dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          code=0
+          git ls-remote --exit-code --heads origin data > /dev/null || code=$?
+          case "$code" in
+            0) echo "exists=true"  >> "$GITHUB_OUTPUT" ;;
+            2) echo "exists=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error title=Rama data::git ls-remote falló (código $code)"; exit 1 ;;
+          esac
 
       # Caso normal: la rama ya existe y se descarga en .data.
       - name: Checkout de la rama data
