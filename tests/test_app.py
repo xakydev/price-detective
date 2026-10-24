@@ -339,6 +339,27 @@ class TestSourceFailures:
         assert "Chollómetro: no disponible" in world.messages[0]
         assert "1.109,00 €" in world.messages[0]
 
+    def test_chollometro_props_not_an_object_exits_zero_and_summary_reports_it(
+        self,
+        make_client: ClientFactory,
+        load_fixture: Callable[[str], str],
+        settings: Settings,
+        history_path: Path,
+        now: datetime,
+    ) -> None:
+        payload = {"name": "ThreadMainListItemNormalizer", "props": []}
+        html = (
+            f'<article id="thread_1"><div data-vue3="{escape(json.dumps(payload))}">'
+            "</div></article>"
+        )
+        world = FakeWorld(load_fixture, chollometro_html=html)
+
+        code = run(settings, make_client(world), now, False, history_path)
+
+        assert code == EXIT_OK
+        assert "Chollómetro: no disponible" in world.messages[0]
+        assert "1.109,00 €" in world.messages[0]
+
     def test_apple_down_still_processes_chollometro(
         self,
         make_client: ClientFactory,
