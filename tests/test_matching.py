@@ -76,3 +76,36 @@ class TestClassifyRejected:
 
     def test_classify_numeric_prefix_returns_none(self) -> None:
         assert classify("iPhone 170 256GB") is None
+
+
+class TestClassifyRam:
+    @pytest.mark.parametrize(
+        "capacities",
+        [
+            "256gb 8gb ram",
+            "256gb (8gb ram)",
+            "256 gb 8 gb de ram",
+            "256gb + 8gb",
+            "8gb/256gb",
+            "256gb 256gb",
+        ],
+    )
+    def test_classify_ram_or_small_capacity_is_ignored(self, capacities: str) -> None:
+        assert classify(f"iPhone 17 {capacities}") == (PhoneModel.IPHONE_17, 256)
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "iphone 17 16gb",
+            "iphone 17 8gb ram",
+            "iphone 17 512gb 8gb ram",
+            "iphone 17 256gb 32gb",
+            "iphone 17 256gb ram",
+            "iphone 17 256gb 1tb",
+            "iPhone 17 Pro Max 256GB 12GB RAM",
+        ],
+    )
+    def test_classify_non_target_storage_with_ram_returns_none(
+        self, title: str
+    ) -> None:
+        assert classify(title) is None

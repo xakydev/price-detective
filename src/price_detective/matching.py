@@ -10,7 +10,12 @@ __all__ = ["TARGET_STORAGE_GB", "classify"]
 TARGET_STORAGE_GB = 256
 
 _MODEL = re.compile(r"\biphone\s*17(?P<pro>\s+pro)?\b")
-_CAPACITY = re.compile(r"\b(?P<amount>\d+)\s*(?P<unit>gb|tb)\b")
+_CAPACITY = re.compile(
+    r"\b(?P<amount>\d+)\s*(?P<unit>gb|tb)\b(?P<ram>\s*(?:de\s+)?ram\b)?"
+)
+# Ningún iPhone 17 se vende con 16 GB o menos de almacenamiento: esas cifras
+# son memoria RAM ("256GB + 8GB", "8GB/256GB").
+_MAX_RAM_GB = 16
 _DENY = re.compile(
     r"\bpro\s*max\b"
     r"|\bair\b"
@@ -30,8 +35,12 @@ def _normalize(title: str) -> str:
 def _capacities_gb(text: str) -> set[int]:
     capacities: set[int] = set()
     for match in _CAPACITY.finditer(text):
+        if match["ram"]:
+            continue
         amount = int(match["amount"])
-        capacities.add(amount * 1024 if match["unit"] == "tb" else amount)
+        gigabytes = amount * 1024 if match["unit"] == "tb" else amount
+        if gigabytes > _MAX_RAM_GB:
+            capacities.add(gigabytes)
     return capacities
 
 
