@@ -93,6 +93,26 @@ class TestClassifyRam:
     def test_classify_ram_or_small_capacity_is_ignored(self, capacities: str) -> None:
         assert classify(f"iPhone 17 {capacities}") == (PhoneModel.IPHONE_17, 256)
 
+    # Títulos literales del escenario "Títulos con RAM" de la spec de offers.
+    @pytest.mark.parametrize(
+        ("title", "model"),
+        [
+            ("iPhone 17 256GB 8GB RAM", PhoneModel.IPHONE_17),
+            ("iPhone 17 256GB + 8GB", PhoneModel.IPHONE_17),
+            ("iPhone 17 Pro 8GB/256GB", PhoneModel.IPHONE_17_PRO),
+            ("iPhone 17 256GB (8GB RAM) azul", PhoneModel.IPHONE_17),
+            ("iPhone 17 Pro 256GB 12GB RAM", PhoneModel.IPHONE_17_PRO),
+        ],
+    )
+    def test_classify_spec_titles_with_ram_are_accepted(
+        self, title: str, model: PhoneModel
+    ) -> None:
+        assert classify(title) == (model, 256)
+
+    def test_classify_ram_before_its_value_is_a_known_false_negative(self) -> None:
+        # "RAM" se asocia a la capacidad que la precede (spec de offers).
+        assert classify("iPhone 17 256GB RAM 8GB") is None
+
     @pytest.mark.parametrize(
         "title",
         [
